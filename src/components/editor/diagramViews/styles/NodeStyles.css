@@ -1,0 +1,189 @@
+/* Node Styles - Extracted from inline styles for better performance */
+
+/* ============================================
+   GROUP NODE STYLES
+   ============================================ */
+
+.group-node {
+  width: 100%;
+  height: 100%;
+  text-align: center;
+}
+
+.group-node__drag-handle {
+  user-select: none;
+  display: inline-block;
+  cursor: grab;
+  padding: 4px 8px;
+  position: relative;
+  z-index: 1;
+  pointer-events: auto;
+}
+
+.group-node__drag-handle:active {
+  cursor: grabbing;
+}
+
+.group-node__type-label {
+  font-weight: bold;
+  margin-bottom: 8px;
+  font-size: 14px;
+  color: #000000;
+  text-transform: uppercase;
+  border-bottom: 2px solid #000000;
+  padding-bottom: 8px;
+  pointer-events: auto;
+}
+
+.group-node__label {
+  font-weight: 700;
+  margin-bottom: 8px;
+  font-size: 20px;
+  color: #000000;
+  font-family: monospace;
+  line-height: 1.2;
+  pointer-events: auto;
+}
+
+/* ============================================
+   SERVICE NODE STYLES
+   ============================================ */
+
+.service-node {
+  padding: 12px;
+  border-radius: 8px;
+  width: 100%;
+  height: 100%;
+  min-width: 180px;
+  min-height: 100px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transition: all 0.2s ease;
+  cursor: move;
+  user-select: none;
+  position: relative;
+}
+
+.service-node--selected {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+}
+
+.service-node--default {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.service-node__icon-container {
+  margin-bottom: 8px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.service-node__provider-badge {
+  font-size: 10px;
+  color: white;
+  padding: 2px 6px;
+  border-radius: 10px;
+  margin-top: 4px;
+  text-transform: uppercase;
+  font-weight: bold;
+}
+
+.service-node__type-label {
+  font-weight: bold;
+  margin-bottom: 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  padding-bottom: 4px;
+  width: 100%;
+}
+
+.service-node__label {
+  font-weight: 700;
+  margin-bottom: 6px;
+  font-size: 14px;
+  color: #000000;
+  font-family: monospace;
+  line-height: 1.2;
+}
+
+/* ============================================
+   HANDLE STYLES
+   ============================================ */
+
+.node-handle {
+  pointer-events: auto;
+  transition: opacity 0.2s;
+}
+
+.node-handle--visible {
+  opacity: 1;
+}
+
+.node-handle--hidden {
+  opacity: 0;
+}
+
+/* ============================================
+   ANIMATIONS
+   ============================================ */
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+
+.animation-pulse {
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.animation-bounce {
+  animation: bounce 1s ease-in-out infinite;
+}
+
+/* ============================================
+   RESIZER STYLES
+   ============================================ */
+
+.react-flow__resize-control {
+  background: #667eea !important;
+}
+
+/* ============================================
+   RESPONSIVE ADJUSTMENTS
+   ============================================ */
+
+@media (max-width: 768px) {
+  .service-node {
+    min-width: 140px;
+    min-height: 80px;
+    padding: 8px;
+  }
+
+  .service-node__label {
+    font-size: 12px;
+  }
+}
+
+/* ============================================
+   ACCESSIBILITY
+   ============================================ */
+
+.group-node:focus-visible,
+.service-node:focus-visible {
+  outline: 2px solid #667eea;
+  outline-offset: 2px;
+}
+
+.group-node__drag-handle:focus-visible {
+  outline: 2px solid #667eea;
+  outline-offset: 2px;
+}

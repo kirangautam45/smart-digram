@@ -19,6 +19,7 @@
     "@mui/x-data-grid": "^7.24.1",
     "@svgr/webpack": "^8.1.0",
     "@tailwindcss/postcss": "^4.1.17",
+    "@xyflow/react": "^12.9.3",
     "ahooks": "^3.8.4",
     "axios": "^1.7.9",
     "codemirror": "^5.65.18",

@@ -68,6 +68,9 @@ import DiagramStylePanel from "@/components/diagram-styling/DiagramStylePanel";
 import NodeEditorPanel from "@/components/diagram-styling/NodeEditorPanel";
 import ColorPickerGrid from "@/components/common/ColorPickerGrid";
 import { useDiagramStore } from "@/store/diagramStore";
+import { useEdgePointerRouting } from "./hooks/useEdgePointerRouting";
+import { HANDLE_POSITIONS, DEFAULT_TEXT_SIZES, createHandleStyle, CAPTURE_EVENTS, BUBBLE_EVENTS } from "./constants/nodeConstants";
+import "./styles/NodeStyles.css";
 import { useArchitectureStore } from "@/store/architectureStore";
 import axiosInstance from "@/utils/axiosInstance";
 import toast from "react-hot-toast";
@@ -178,273 +181,37 @@ const GroupNode = React.memo(({ data, selected }) => {
   const groupRef = useRef(null);
   const wrapperRef = useRef(null);
   const [isHovering, setIsHovering] = useState(false);
-  const pointerStateRef = useRef({
-    active: false,
-    wrapper: null,
-    pointerId: null,
-    previousValue: "",
-    capturedTarget: null,
-  });
 
-  const endPointerPassThrough = useCallback(() => {
-    const state = pointerStateRef.current;
-    if (state.capturedTarget && typeof state.pointerId === "number" && state.pointerId >= 0) {
-      state.capturedTarget.releasePointerCapture?.(state.pointerId);
-    }
-    if (!state.active || !state.wrapper) {
-      state.capturedTarget = null;
-      state.pointerId = null;
-      return;
-    }
-    state.wrapper.style.pointerEvents = state.previousValue;
-    state.active = false;
-    state.capturedTarget = null;
-    state.wrapper = null;
-    state.pointerId = null;
-    state.previousValue = "";
-  }, []);
+  // Use extracted hook for pointer/edge routing
+  const { handlePointerEvent, endPointerPassThrough } = useEdgePointerRouting();
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handleGlobalPointerEnd = (event) => {
-      if (
-        pointerStateRef.current.pointerId === (event.pointerId ?? "mouse")
-      ) {
-        endPointerPassThrough();
-      }
-    };
-    window.addEventListener("pointerup", handleGlobalPointerEnd, true);
-    window.addEventListener("pointercancel", handleGlobalPointerEnd, true);
-    return () => {
-      window.removeEventListener("pointerup", handleGlobalPointerEnd, true);
-      window.removeEventListener("pointercancel", handleGlobalPointerEnd, true);
-    };
-  }, [endPointerPassThrough]);
-
-  const routeEventToEdge = useCallback((event, wrapper) => {
-    if (
-      typeof window === "undefined" ||
-      typeof document === "undefined" ||
-      !wrapper
-    ) {
-      return false;
-    }
-
-    const state = pointerStateRef.current;
-
-    const previous = wrapper.style.pointerEvents;
-    wrapper.style.pointerEvents = "none";
-    const underlying = document.elementFromPoint(
-      event.clientX,
-      event.clientY
-    );
-    wrapper.style.pointerEvents = previous;
-    if (!underlying) return false;
-
-    const updater = underlying.closest(".react-flow__edgeupdater");
-    const targetEdge = updater || underlying.closest(".react-flow__edge");
-
-    if (!targetEdge) {
-      wrapper.style.cursor = "";
-      return false;
-    }
-
-    const cursor = window.getComputedStyle(targetEdge).cursor;
-    wrapper.style.cursor =
-      cursor && cursor !== "auto" ? cursor : "pointer";
-
-    const supportsPointerEvent =
-      typeof window.PointerEvent !== "undefined" &&
-      event instanceof window.PointerEvent;
-
-    const eventInit = {
-      bubbles: true,
-      cancelable: true,
-      clientX: event.clientX,
-      clientY: event.clientY,
-      buttons: event.buttons ?? 0,
-      button: event.button ?? 0,
-      altKey: event.altKey,
-      ctrlKey: event.ctrlKey,
-      metaKey: event.metaKey,
-      shiftKey: event.shiftKey,
-      isPrimary:
-        typeof event.isPrimary === "boolean" ? event.isPrimary : true,
-    };
-
-    if (supportsPointerEvent) {
-      eventInit.pointerId = event.pointerId ?? 0;
-      eventInit.pointerType = event.pointerType ?? "mouse";
-      eventInit.pressure = event.pressure ?? 0;
-      const syntheticPointer = new window.PointerEvent(
-        event.type,
-        eventInit
-      );
-      targetEdge.dispatchEvent(syntheticPointer);
-    } else {
-      const syntheticMouse = new MouseEvent(event.type, eventInit);
-      targetEdge.dispatchEvent(syntheticMouse);
-    }
-
-    const pointerToMouseEventMap = {
-      pointerdown: "mousedown",
-      pointermove: "mousemove",
-      pointerup: "mouseup",
-    };
-    const mouseEventType =
-      pointerToMouseEventMap[event.type.toLowerCase()] || null;
-    if (
-      mouseEventType &&
-      (event.pointerType === "mouse" || event.pointerType === undefined)
-    ) {
-      const mouseEvent = new MouseEvent(mouseEventType, eventInit);
-      targetEdge.dispatchEvent(mouseEvent);
-    }
-
-    if (event.type === "pointerdown" && updater) {
-      if (!state.active) {
-        state.previousValue = wrapper.style.pointerEvents || "";
-      }
-      state.active = true;
-      state.wrapper = wrapper;
-      const pointerId = typeof event.pointerId === "number" ? event.pointerId : -1;
-      state.pointerId = pointerId;
-      state.capturedTarget = targetEdge;
-      if (pointerId >= 0) {
-        wrapper.releasePointerCapture?.(pointerId);
-        targetEdge?.setPointerCapture?.(pointerId);
-      }
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-    return true;
-  }, []);
-
-  const shouldBypassEvent = useCallback((event, wrapper) => {
-    if (!wrapper) return false;
-    const target = event.target;
-    if (!(target instanceof Element)) return false;
-
-    // Always allow drag-handle to pass through (for group dragging)
-    if (target.closest(".drag-handle")) return false;
-
-    if (target.closest(".react-flow__handle")) return false;
-    if (target.closest("[data-group-interactive='true']")) return false;
-
-    const targetNodeWrapper = target.closest(".react-flow__node");
-    if (targetNodeWrapper && targetNodeWrapper !== wrapper) {
-      // Allow service nodes (child nodes with type="service") to have drag events
-      const isServiceNode = targetNodeWrapper.classList.contains('react-flow__node-service');
-      if (isServiceNode) return false;  // Bypass - let service handle its own drag
-      return true;  // Don't bypass - handle the event for edge routing
-    }
-    return true;
-  }, []);
-
-  const handlePointerEvent = useCallback(
-    (event) => {
-      const wrapper = wrapperRef.current;
-
-      // CRITICAL: Don't interfere with drag events on ANY nodes
-      if (event.target instanceof Element) {
-        // Check if we're on a service node
-        const serviceNode = event.target.closest('.react-flow__node-service');
-        if (serviceNode) {
-          return; // Let ReactFlow handle service node interactions
-        }
-
-        // Check if we're on the drag handle
-        const dragHandle = event.target.closest('.drag-handle');
-        if (dragHandle) {
-          return; // Let ReactFlow handle drag handle interactions
-        }
-
-        // Don't interfere during active dragging (primary button pressed)
-        if (event.buttons === 1 && (event.type === 'pointermove' || event.type === 'mousemove')) {
-          return; // Likely dragging, don't interfere
-        }
-
-        // Don't interfere with pointerdown on drag handle or service nodes
-        if ((event.type === 'pointerdown' || event.type === 'mousedown')) {
-          const isDragHandle = event.target.closest('.drag-handle');
-          const isServiceNode = event.target.closest('.react-flow__node-service');
-          if (isDragHandle || isServiceNode) {
-            return; // Let ReactFlow initiate drag
-          }
-        }
-      }
-
-      if (!shouldBypassEvent(event, wrapper)) return;
-      const handled = routeEventToEdge(event, wrapper);
-      if (!handled && wrapper) {
-        wrapper.style.cursor = "";
-      }
-      if (event.type === "pointerup" || event.type === "pointerleave") {
-        endPointerPassThrough();
-      }
-    },
-    [routeEventToEdge, shouldBypassEvent, endPointerPassThrough]
-  );
-
+  // Setup event listeners for edge routing
   useEffect(() => {
     const wrapper = groupRef.current?.closest(".react-flow__node");
     if (!wrapper) return;
     wrapperRef.current = wrapper;
 
-    // Split events into capture and bubble phase
-    // Use capture phase for hover events (to detect edges early)
-    const captureEvents = [
-      "pointerover",
-      "pointerout",
-      "pointerenter",
-      "pointerleave",
-    ];
+    const onPointerEvent = (event) => handlePointerEvent(event, wrapper);
 
-    // Use bubble phase for drag/click events (to not interfere with ReactFlow)
-    const bubbleEvents = [
-      "pointerdown",
-      "pointermove",
-      "pointerup",
-      "mousedown",
-      "mousemove",
-      "mouseup",
-      "click",
-    ];
-
-    captureEvents.forEach((evt) =>
-      wrapper.addEventListener(evt, handlePointerEvent, true)
-    );
-    bubbleEvents.forEach((evt) =>
-      wrapper.addEventListener(evt, handlePointerEvent, false)
-    );
+    // Use capture phase for hover events, bubble for drag/click
+    CAPTURE_EVENTS.forEach((evt) => wrapper.addEventListener(evt, onPointerEvent, true));
+    BUBBLE_EVENTS.forEach((evt) => wrapper.addEventListener(evt, onPointerEvent, false));
 
     return () => {
-      captureEvents.forEach((evt) =>
-        wrapper.removeEventListener(evt, handlePointerEvent, true)
-      );
-      bubbleEvents.forEach((evt) =>
-        wrapper.removeEventListener(evt, handlePointerEvent, false)
-      );
-      if (wrapperRef.current === wrapper) {
-        wrapperRef.current = null;
-      }
+      CAPTURE_EVENTS.forEach((evt) => wrapper.removeEventListener(evt, onPointerEvent, true));
+      BUBBLE_EVENTS.forEach((evt) => wrapper.removeEventListener(evt, onPointerEvent, false));
+      if (wrapperRef.current === wrapper) wrapperRef.current = null;
       endPointerPassThrough();
     };
   }, [handlePointerEvent, endPointerPassThrough]);
 
-  const textSizes = {
-    typeFontSize: "14px",
-    labelFontSize: "20px",
-    nodeFontSize: "12px",
-    handleSize: 10,
-  };
+  const textSizes = DEFAULT_TEXT_SIZES.group;
 
   // Individual style overrides global style
   const individualStyle = data?.individualStyle || {};
   const globalStyle = data?.customStyle || {};
   const custom = { ...globalStyle, ...individualStyle };
-  const backgroundColor = custom.backgroundColor || "transparent";
+  const backgroundColor = "transparent"; // Always transparent for groups
   const textColor = custom.textColor || "#000000";
   const fontFamily = custom.fontFamily || "Arial, sans-serif";
   const fontSize = custom.fontSize || textSizes.nodeFontSize;
@@ -519,110 +286,23 @@ const GroupNode = React.memo(({ data, selected }) => {
         </div>
       </div>
 
-      <Handle
-        type="target"
-        position={Position.Top}
-        id="top"
-        style={{
-          background: "#667eea",
-          width: textSizes.handleSize,
-          height: textSizes.handleSize,
-          pointerEvents: "auto",
-          opacity: selected || isHovering ? 1 : 0,
-          transition: "opacity 0.2s",
-        }}
-      />
-      <Handle
-        type="source"
-        position={Position.Top}
-        id="top"
-        style={{
-          background: "#667eea",
-          width: textSizes.handleSize,
-          height: textSizes.handleSize,
-          pointerEvents: "auto",
-          opacity: selected || isHovering ? 1 : 0,
-          transition: "opacity 0.2s",
-        }}
-      />
-      <Handle
-        type="target"
-        position={Position.Bottom}
-        id="bottom"
-        style={{
-          background: "#667eea",
-          width: textSizes.handleSize,
-          height: textSizes.handleSize,
-          pointerEvents: "auto",
-          opacity: selected || isHovering ? 1 : 0,
-          transition: "opacity 0.2s",
-        }}
-      />
-      <Handle
-        type="source"
-        position={Position.Bottom}
-        id="bottom"
-        style={{
-          background: "#667eea",
-          width: textSizes.handleSize,
-          height: textSizes.handleSize,
-          pointerEvents: "auto",
-          opacity: selected || isHovering ? 1 : 0,
-          transition: "opacity 0.2s",
-        }}
-      />
-      <Handle
-        type="target"
-        position={Position.Left}
-        id="left"
-        style={{
-          background: "#667eea",
-          width: textSizes.handleSize,
-          height: textSizes.handleSize,
-          pointerEvents: "auto",
-          opacity: selected || isHovering ? 1 : 0,
-          transition: "opacity 0.2s",
-        }}
-      />
-      <Handle
-        type="source"
-        position={Position.Left}
-        id="left"
-        style={{
-          background: "#667eea",
-          width: textSizes.handleSize,
-          height: textSizes.handleSize,
-          pointerEvents: "auto",
-          opacity: selected || isHovering ? 1 : 0,
-          transition: "opacity 0.2s",
-        }}
-      />
-      <Handle
-        type="target"
-        position={Position.Right}
-        id="right"
-        style={{
-          background: "#667eea",
-          width: textSizes.handleSize,
-          height: textSizes.handleSize,
-          pointerEvents: "auto",
-          opacity: selected || isHovering ? 1 : 0,
-          transition: "opacity 0.2s",
-        }}
-      />
-      <Handle
-        type="source"
-        position={Position.Right}
-        id="right"
-        style={{
-          background: "#667eea",
-          width: textSizes.handleSize,
-          height: textSizes.handleSize,
-          pointerEvents: "auto",
-          opacity: selected || isHovering ? 1 : 0,
-          transition: "opacity 0.2s",
-        }}
-      />
+      {/* DRY: Map handles instead of 8 manual components */}
+      {HANDLE_POSITIONS.flatMap(({ position, id }) => [
+        <Handle
+          key={`${id}-target`}
+          type="target"
+          position={position}
+          id={id}
+          style={createHandleStyle(selected || isHovering, textSizes.handleSize)}
+        />,
+        <Handle
+          key={`${id}-source`}
+          type="source"
+          position={position}
+          id={id}
+          style={createHandleStyle(selected || isHovering, textSizes.handleSize)}
+        />,
+      ])}
     </div>
   );
 });
@@ -634,7 +314,7 @@ const ServiceNode = React.memo(({ data, selected }) => {
   const getServiceStyle = (serviceInfo) => {
     const baseStyle = {
       border: "2px solid",
-      background: "#ffffff",
+      background: "transparent",
       borderColor: serviceInfo.color,
     };
 
@@ -655,13 +335,13 @@ const ServiceNode = React.memo(({ data, selected }) => {
       case "server":
         return { ...baseStyle, borderStyle: "solid" };
       case "machine":
-        return { ...baseStyle, borderStyle: "solid", background: "#f5f5f5" };
+        return { ...baseStyle, borderStyle: "solid" };
       case "api":
         return { ...baseStyle, borderStyle: "dashed" };
       case "queue":
         return { ...baseStyle, borderStyle: "ridge" };
       default:
-        return { ...baseStyle, borderStyle: "solid", background: "#f8f8f8" };
+        return { ...baseStyle, borderStyle: "solid" };
     }
   };
 
@@ -792,36 +472,23 @@ const ServiceNode = React.memo(({ data, selected }) => {
         {data.serviceData.label}
       </div>
 
-      {["top", "bottom", "left", "right"].map((position) => (
-        <React.Fragment key={position}>
-          <Handle
-            type="target"
-            position={
-              Position[position.charAt(0).toUpperCase() + position.slice(1)]
-            }
-            id={position}
-            style={{
-              background: serviceInfo.color,
-              width: 8,
-              height: 8,
-              border: "1px solid white",
-            }}
-          />
-          <Handle
-            type="source"
-            position={
-              Position[position.charAt(0).toUpperCase() + position.slice(1)]
-            }
-            id={position}
-            style={{
-              background: serviceInfo.color,
-              width: 8,
-              height: 8,
-              border: "1px solid white",
-            }}
-          />
-        </React.Fragment>
-      ))}
+      {/* DRY: Map handles using shared constants */}
+      {HANDLE_POSITIONS.flatMap(({ position, id }) => [
+        <Handle
+          key={`${id}-target`}
+          type="target"
+          position={position}
+          id={id}
+          style={createHandleStyle(true, DEFAULT_TEXT_SIZES.service.handleSize, serviceInfo.color)}
+        />,
+        <Handle
+          key={`${id}-source`}
+          type="source"
+          position={position}
+          id={id}
+          style={createHandleStyle(true, DEFAULT_TEXT_SIZES.service.handleSize, serviceInfo.color)}
+        />,
+      ])}
     </div>
   );
 });
@@ -1188,6 +855,7 @@ const ArchitectureDiagramView = () => {
   const codeRef = useRef(code);
   codeRef.current = code;
   const nodesRef = useRef([]);
+  const edgesRef = useRef([]);
 
   // History management for undo/redo - using global store
   const pushToHistory = useStore((state) => state.pushToHistory);
@@ -1313,17 +981,20 @@ const ArchitectureDiagramView = () => {
             const resizedNode = updatedNodes.find(n => n.id === change.id);
             if (resizedNode && resizedNode.data?.nodeType === 'group') {
               const groupNodeId = resizedNode.id;
+              const groupDataId = resizedNode.data.groupData?.id;
               const oldDimensions = nds.find(n => n.id === change.id);
-              const oldWidth = oldDimensions?.width || oldDimensions?.style?.width || 600;
-              const oldHeight = oldDimensions?.height || oldDimensions?.style?.height || 400;
+              const oldWidth = oldDimensions?.width || oldDimensions?.style?.width || oldDimensions?.measured?.width || 600;
+              const oldHeight = oldDimensions?.height || oldDimensions?.style?.height || oldDimensions?.measured?.height || 400;
 
-              const scaleX = change.dimensions.width / oldWidth;
-              const scaleY = change.dimensions.height / oldHeight;
+              const newGroupWidth = change.dimensions.width;
+              const newGroupHeight = change.dimensions.height;
+              const scaleX = newGroupWidth / oldWidth;
+              const scaleY = newGroupHeight / oldHeight;
 
               // Find and resize all child services (check both parentNode and serviceData.group)
               return updatedNodes.map((node) => {
                 const isChildService = node.data?.nodeType === 'service' &&
-                  (node.parentNode === groupNodeId || node.data.serviceData?.group === resizedNode.data.groupData?.id);
+                  (node.parentNode === groupNodeId || node.data.serviceData?.group === groupDataId || node.data.serviceData?.group === groupNodeId);
 
                 if (isChildService) {
                   // Calculate new dimensions for child service
@@ -1335,8 +1006,13 @@ const ArchitectureDiagramView = () => {
                   // Scale the position (relative position within parent)
                   const currentX = node.position?.x || 0;
                   const currentY = node.position?.y || 0;
-                  const newX = currentX * scaleX;
-                  const newY = currentY * scaleY;
+                  let newX = currentX * scaleX;
+                  let newY = currentY * scaleY;
+
+                  // Ensure service stays within group bounds (with padding)
+                  const padding = 20;
+                  newX = Math.max(padding, Math.min(newX, newGroupWidth - newWidth - padding));
+                  newY = Math.max(padding, Math.min(newY, newGroupHeight - newHeight - padding));
 
                   return {
                     ...node,
@@ -1351,6 +1027,7 @@ const ArchitectureDiagramView = () => {
                     },
                     width: newWidth,
                     height: newHeight,
+                    parentNode: groupNodeId, // Ensure parentNode is set
                   };
                 }
                 return node;
@@ -1360,13 +1037,13 @@ const ArchitectureDiagramView = () => {
             return updatedNodes;
           });
 
-          // Save dimensions to code after resize completes
-          setTimeout(() => {
-            setNodes((currentNodes) => {
-              saveNodePositionsToCode(currentNodes);
-              return currentNodes;
-            });
-          }, 100);
+          // Disabled auto-save of dimensions to code
+          // setTimeout(() => {
+          //   setNodes((currentNodes) => {
+          //     saveNodePositionsToCode(currentNodes);
+          //     return currentNodes;
+          //   });
+          // }, 100);
         }
       });
 
@@ -1386,16 +1063,12 @@ const ArchitectureDiagramView = () => {
       }
 
       if (shouldTrack && !isApplyingHistory) {
-        // Push to history after render cycle completes
-        queueMicrotask(() => {
-          setNodes((currentNodes) => {
-            setEdges((currentEdges) => {
-              pushToHistory({ nodes: currentNodes, edges: currentEdges, code: codeRef.current });
-              return currentEdges;
-            });
-            return currentNodes;
-          });
-        });
+        // Push to history after render cycle completes using setTimeout to avoid setState during render
+        setTimeout(() => {
+          const currentNodes = nodesRef.current;
+          const currentEdges = edgesRef.current;
+          pushToHistory({ nodes: currentNodes, edges: currentEdges, code: codeRef.current });
+        }, 0);
       }
     },
     [onNodesChange, setNodes, setEdges, pushToHistory, isApplyingHistory]
@@ -1403,6 +1076,9 @@ const ArchitectureDiagramView = () => {
   useEffect(() => {
     nodesRef.current = nodes;
   }, [nodes]);
+  useEffect(() => {
+    edgesRef.current = edges;
+  }, [edges]);
 
   // Initialize history when diagram loads
   const hasInitializedHistory = useRef(false);
@@ -1656,21 +1332,23 @@ const ArchitectureDiagramView = () => {
 
   const findContainingGroup = useCallback(
     (absoluteCenter, excludeGroupId = null, snapshot = nodesRef.current) => {
+      // Add small padding to make detection more forgiving
+      const padding = 10;
       return snapshot
         .filter((node) => node.type === "group" && node.id !== excludeGroupId)
         .find((groupNode) => {
           const fallback = {
-            width: groupNode.style?.width || 600,
-            height: groupNode.style?.height || 400,
+            width: groupNode.style?.width || groupNode.width || 600,
+            height: groupNode.style?.height || groupNode.height || 400,
           };
           const size = getNodeDimensions(groupNode.id, fallback);
           const groupPosition = getAbsoluteNodePosition(groupNode, snapshot);
 
           return (
-            absoluteCenter.x >= groupPosition.x &&
-            absoluteCenter.x <= groupPosition.x + size.width &&
-            absoluteCenter.y >= groupPosition.y &&
-            absoluteCenter.y <= groupPosition.y + size.height
+            absoluteCenter.x >= groupPosition.x - padding &&
+            absoluteCenter.x <= groupPosition.x + size.width + padding &&
+            absoluteCenter.y >= groupPosition.y - padding &&
+            absoluteCenter.y <= groupPosition.y + size.height + padding
           );
         });
     },
@@ -1840,13 +1518,7 @@ const ArchitectureDiagramView = () => {
 
       // Save to history BEFORE deletion for undo/redo
       if (!isApplyingHistory) {
-        setNodes((currentNodes) => {
-          setEdges((currentEdges) => {
-            pushToHistory({ nodes: currentNodes, edges: currentEdges, code: codeRef.current });
-            return currentEdges;
-          });
-          return currentNodes;
-        });
+        pushToHistory({ nodes: nodesRef.current, edges: edgesRef.current, code: codeRef.current });
       }
 
       setPreventRerender(true);
@@ -1882,13 +1554,7 @@ const ArchitectureDiagramView = () => {
 
       // Save to history BEFORE update for undo/redo
       if (!isApplyingHistory) {
-        setNodes((currentNodes) => {
-          setEdges((currentEdges) => {
-            pushToHistory({ nodes: currentNodes, edges: currentEdges, code: codeRef.current });
-            return currentEdges;
-          });
-          return currentNodes;
-        });
+        pushToHistory({ nodes: nodesRef.current, edges: edgesRef.current, code: codeRef.current });
       }
 
       setPreventRerender(true);
@@ -1966,15 +1632,9 @@ const ArchitectureDiagramView = () => {
 
         // Track edge removal in history - defer to avoid setState during render
         if (!isApplyingHistory) {
-          queueMicrotask(() => {
-            setNodes((currentNodes) => {
-              setEdges((currentEdges) => {
-                pushToHistory({ nodes: currentNodes, edges: currentEdges, code: codeRef.current });
-                return currentEdges;
-              });
-              return currentNodes;
-            });
-          });
+          setTimeout(() => {
+            pushToHistory({ nodes: nodesRef.current, edges: edgesRef.current, code: codeRef.current });
+          }, 0);
         }
       }
 
@@ -2594,7 +2254,7 @@ const ArchitectureDiagramView = () => {
             },
             draggable: true,
             parentNode: entry.group.id,
-            extent: "parent",
+            // Removed extent: "parent" to allow dragging services between groups
             width: savedDimensions?.width || 180,
             height: savedDimensions?.height || 100,
           };
@@ -2706,7 +2366,25 @@ const ArchitectureDiagramView = () => {
             (line) => !line.trim().startsWith("%% Position:") && !line.trim().startsWith("%% Dimension:")
           );
 
-          updatedNodes.forEach((node) => {
+          // Extract node IDs that exist in the current code
+          const codeNodeIds = new Set();
+          lines.forEach((line) => {
+            const groupMatch = line.match(/^group\s+(\w+)\(/);
+            const serviceMatch = line.match(/^service\s+(\w+)\(/);
+            if (groupMatch) codeNodeIds.add(groupMatch[1]);
+            if (serviceMatch) codeNodeIds.add(serviceMatch[1]);
+          });
+
+          // Check if any of the updated nodes exist in current code
+          // If code was completely replaced (paste), skip saving to avoid overwriting
+          const validNodes = updatedNodes.filter((node) => codeNodeIds.has(node.id));
+          if (validNodes.length === 0) {
+            console.log('No matching nodes in current code, skipping position save');
+            setIsSaving(false);
+            return;
+          }
+
+          validNodes.forEach((node) => {
             if (
               node.type === "service" &&
               node.parentNode &&
@@ -2792,9 +2470,7 @@ const ArchitectureDiagramView = () => {
         );
 
         // Force ReactFlow to re-read node properties after state update
-        setTimeout(() => {
-          updateNodeInternals(node.id);
-        }, 0);
+        queueMicrotask(() => updateNodeInternals(node.id));
       } else if (node.type === "group") {
         // For group nodes, don't modify state during drag start
         // Just log for debugging - ReactFlow handles group dragging natively
@@ -2858,9 +2534,10 @@ const ArchitectureDiagramView = () => {
             n.id === node.id ? { ...n, position: node.position, dragging: false } : n
           );
 
-          setTimeout(() => {
-            saveNodePositionsToCode(updatedNodes);
-          }, 100);
+          // Disabled auto-save
+          // setTimeout(() => {
+          //   saveNodePositionsToCode(updatedNodes);
+          // }, 100);
 
           return updatedNodes;
         });
@@ -2950,7 +2627,7 @@ const ArchitectureDiagramView = () => {
                 ...n,
                 position: finalPosition,
                 parentNode: originalParentId || undefined,
-                extent: originalParentId ? "parent" : undefined,
+                // Removed extent to allow dragging services between groups
                 dragging: false,
                 _originalParent: undefined,
               };
@@ -2958,9 +2635,10 @@ const ArchitectureDiagramView = () => {
             return n;
           });
 
-          setTimeout(() => {
-            saveNodePositionsToCode(updatedNodes);
-          }, 100);
+          // Disabled auto-save
+          // setTimeout(() => {
+          //   saveNodePositionsToCode(updatedNodes);
+          // }, 100);
 
           return updatedNodes;
         });
@@ -3021,13 +2699,7 @@ const ArchitectureDiagramView = () => {
       // Save to history for undo/redo
       setTimeout(() => {
         if (!isApplyingHistory) {
-          setNodes((currentNodes) => {
-            setEdges((currentEdges) => {
-              pushToHistory({ nodes: currentNodes, edges: currentEdges, code: codeRef.current });
-              return currentEdges;
-            });
-            return currentNodes;
-          });
+          pushToHistory({ nodes: nodesRef.current, edges: edgesRef.current, code: codeRef.current });
         }
       }, 50);
 
@@ -3134,7 +2806,7 @@ const ArchitectureDiagramView = () => {
         },
         draggable: true,
         parentNode: groupId || undefined,
-        extent: groupId ? "parent" : undefined,
+        // Removed extent to allow dragging services between groups
       };
 
       setNodes((currentNodes) => [...currentNodes, newServiceNode]);
@@ -3446,13 +3118,7 @@ const ArchitectureDiagramView = () => {
     (nodeId, updates) => {
       // Save to history BEFORE changes for undo/redo
       if (!isApplyingHistory) {
-        setNodes((currentNodes) => {
-          setEdges((currentEdges) => {
-            pushToHistory({ nodes: currentNodes, edges: currentEdges, code: codeRef.current });
-            return currentEdges;
-          });
-          return currentNodes;
-        });
+        pushToHistory({ nodes: nodesRef.current, edges: edgesRef.current, code: codeRef.current });
       }
 
       setNodes((nds) =>
@@ -3507,13 +3173,7 @@ const ArchitectureDiagramView = () => {
     (nodeId) => {
       // Save to history BEFORE deletion for undo/redo
       if (!isApplyingHistory) {
-        setNodes((currentNodes) => {
-          setEdges((currentEdges) => {
-            pushToHistory({ nodes: currentNodes, edges: currentEdges, code: codeRef.current });
-            return currentEdges;
-          });
-          return currentNodes;
-        });
+        pushToHistory({ nodes: nodesRef.current, edges: edgesRef.current, code: codeRef.current });
       }
 
       setPreventRerender(true);
@@ -3724,7 +3384,7 @@ const ArchitectureDiagramView = () => {
 
       if (serviceData.group) {
         newServiceNode.parentNode = serviceData.group;
-        newServiceNode.extent = "parent";
+        // Removed extent: "parent" to allow dragging between groups
       }
 
       setNodes((currentNodes) => [...currentNodes, newServiceNode]);
@@ -3734,13 +3394,7 @@ const ArchitectureDiagramView = () => {
       // Save to history for undo/redo
       setTimeout(() => {
         if (!isApplyingHistory) {
-          setNodes((currentNodes) => {
-            setEdges((currentEdges) => {
-              pushToHistory({ nodes: currentNodes, edges: currentEdges, code: codeRef.current });
-              return currentEdges;
-            });
-            return currentNodes;
-          });
+          pushToHistory({ nodes: nodesRef.current, edges: edgesRef.current, code: codeRef.current });
         }
       }, 100);
     },
@@ -4050,13 +3704,7 @@ const ArchitectureDiagramView = () => {
       // Track connection creation in history
       if (!isApplyingHistory) {
         setTimeout(() => {
-          setNodes((currentNodes) => {
-            setEdges((currentEdges) => {
-              pushToHistory({ nodes: currentNodes, edges: currentEdges, code: codeRef.current });
-              return currentEdges;
-            });
-            return currentNodes;
-          });
+          pushToHistory({ nodes: nodesRef.current, edges: edgesRef.current, code: codeRef.current });
         }, 150);
       }
 
@@ -4136,17 +3784,11 @@ const ArchitectureDiagramView = () => {
 
           // If this code change came from MermaidEditor (debounced), push to history
           if (shouldPushHistoryOnParse && !isApplyingHistory) {
+            // Reset the flag immediately to prevent duplicate pushes
+            useStore.setState({ shouldPushHistoryOnParse: false });
             // Schedule history push after state updates complete
             setTimeout(() => {
-              setNodes((currentNodes) => {
-                setEdges((currentEdges) => {
-                  pushToHistory({ nodes: currentNodes, edges: currentEdges, code });
-                  // Reset the flag
-                  useStore.setState({ shouldPushHistoryOnParse: false });
-                  return currentEdges;
-                });
-                return currentNodes;
-              });
+              pushToHistory({ nodes: nodesRef.current, edges: edgesRef.current, code });
             }, 100);
           }
         } catch (error) {
@@ -4262,7 +3904,7 @@ const ArchitectureDiagramView = () => {
                 ? {
                     ...n,
                     parentNode: containingGroup.id,
-                    extent: "parent",
+                    // Removed extent: "parent" to allow future dragging between groups
                     position: clamped,
                     data: {
                       ...n.data,
@@ -4334,7 +3976,7 @@ const ArchitectureDiagramView = () => {
               ...n,
               position: originalPosition,
               parentNode: oldParentId,
-              extent: oldParentId ? "parent" : undefined,
+              // Removed extent to allow dragging between groups
             }
           : n
       )
