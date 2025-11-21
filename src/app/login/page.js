@@ -29,8 +29,8 @@ function Page() {
 
   const handleLogin = () => {
     const redirectUri =
-      // "https://smart-diagrams-be.onrender.com/api/linkedin/callback";
-       "http://localhost:8090/api/linkedin/callback";
+      "https://smart-diagrams-be.onrender.com/api/linkedin/callback";
+      //  "http://localhost:8090/api/linkedin/callback";
 
     const authUrl = `https://www.linkedin.com/oauth/v2/authorization?response_type=code&client_id=${
       process.env.NEXT_PUBLIC_CLIENT_ID
