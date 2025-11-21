@@ -167,8 +167,28 @@ function Page() {
         );
         console.log("API response:", response);
 
+        // Validate if response contains valid Mermaid code
+        const mermaidCode = response.data.mermaidChart || response.data.flowChart?.mermaidString;
+        const validMermaidPrefixes = [
+          'flowchart', 'graph', 'sequenceDiagram', 'classDiagram',
+          'stateDiagram', 'erDiagram', 'journey', 'gantt', 'pie',
+          'requirementDiagram', 'gitGraph', 'mindmap', 'timeline',
+          'block-beta', 'architecture-beta', 'sankey-beta'
+        ];
+
+        const isValidMermaid = mermaidCode && validMermaidPrefixes.some(prefix =>
+          mermaidCode.trim().toLowerCase().startsWith(prefix.toLowerCase())
+        );
+
+        if (!isValidMermaid) {
+          // AI returned conversational text instead of Mermaid code
+          toast.error("AI needs more information. Please provide more details about your diagram.");
+          console.log("Invalid Mermaid response:", mermaidCode);
+          return;
+        }
+
         // Update state and navigate to editor page
-        setCode(response.data.mermaidChart);
+        setCode(mermaidCode);
         typeof window !== "undefined" &&
           sessionStorage.setItem("code", response.data.flowChart.mermaidString);
         router.push(`/editor/${response.data.flowChart._id}`);

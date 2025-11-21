@@ -26,7 +26,9 @@ const MermaidEditor = () => {
     // Store pending history state and debounce timer
     const pendingHistoryRef = useRef(null);
     const debounceTimerRef = useRef(null);
+    const autoSaveTimerRef = useRef(null);
     const editorRef = useRef(null);
+    const hasLoadedRef = useRef(false);
 
     // Flush pending history to store
     const flushPendingHistory = useCallback(() => {
@@ -50,6 +52,8 @@ const MermaidEditor = () => {
 
             // Set code directly from database - NO localStorage/sessionStorage
             setCode(freshCode);
+            // Mark as loaded so auto-save can start working
+            hasLoadedRef.current = true;
 
         } catch (error) {
             console.error('Error fetching flowchart:', error);
@@ -74,6 +78,7 @@ const MermaidEditor = () => {
             fetchData();
         } else {
             setLoading(false); // If new diagram, no need to load
+            hasLoadedRef.current = true; // Allow auto-save for new diagrams too
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [id]);
@@ -116,6 +121,9 @@ const MermaidEditor = () => {
             if (debounceTimerRef.current) {
                 clearTimeout(debounceTimerRef.current);
             }
+            if (autoSaveTimerRef.current) {
+                clearTimeout(autoSaveTimerRef.current);
+            }
             // Flush any pending code changes before unmounting
             if (pendingHistoryRef.current && !isApplyingHistory) {
                 setCode(pendingHistoryRef.current, { pushHistoryOnParse: true });
@@ -123,37 +131,62 @@ const MermaidEditor = () => {
         };
     }, [setCode, isApplyingHistory]);
 
-    // Handles changes in the editor - with debounced history tracking
+    // Handles changes in the editor - with debounced history tracking and auto-save
     const onChange = (value) => {
         if (editorMode === "code") {
             setCode(value);
             // Schedule debounced history push for code changes
             scheduleHistoryPush(value);
+            // Schedule auto-save
+            scheduleAutoSave(value);
         } else {
             setConfig(value);
         }
         setIsModified(true);
     };
 
-    // Function to save to database
-    const handleSave = async () => {
+    // Function to save to database (silent for auto-save)
+    const saveToDatabase = useCallback(async (codeToSave, showToast = true) => {
+        if (!id || id === 'new') return;
         try {
-            const response = await axiosInstance.put(`/api/flowchart/${id}`, { 
-                mermaidString: code 
+            const response = await axiosInstance.put(`/api/flowchart/${id}`, {
+                mermaidString: codeToSave
             });
-            
+
             if (response.status === 200) {
                 setIsModified(false);
-                toast.success(response.data.message);
+                if (showToast) {
+                    toast.success(response.data.message);
+                }
                 console.log('Diagram saved successfully');
-            } else {
+            } else if (showToast) {
                 toast.error("Something went wrong!");
             }
         } catch (error) {
             console.error("Error saving:", error);
-            toast.error("Error occurred while saving");
+            if (showToast) {
+                toast.error("Error occurred while saving");
+            }
         }
+    }, [id]);
+
+    // Manual save handler
+    const handleSave = async () => {
+        await saveToDatabase(code, true);
     };
+
+    // Auto-save with debounce (2 seconds after user stops typing)
+    const scheduleAutoSave = useCallback((newCode) => {
+        if (!id || id === 'new' || !hasLoadedRef.current) return;
+
+        if (autoSaveTimerRef.current) {
+            clearTimeout(autoSaveTimerRef.current);
+        }
+
+        autoSaveTimerRef.current = setTimeout(() => {
+            saveToDatabase(newCode, false);
+        }, 2000);
+    }, [id, saveToDatabase]);
 
     return (
         <Box sx={{ position: "relative", height: "100%" }}>

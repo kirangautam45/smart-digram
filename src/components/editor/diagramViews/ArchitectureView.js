@@ -856,6 +856,8 @@ const ArchitectureDiagramView = () => {
   codeRef.current = code;
   const nodesRef = useRef([]);
   const edgesRef = useRef([]);
+  const autoSaveTimerRef = useRef(null);
+  const hasLoadedRef = useRef(false);
 
   // History management for undo/redo - using global store
   const pushToHistory = useStore((state) => state.pushToHistory);
@@ -877,10 +879,27 @@ const ArchitectureDiagramView = () => {
     setCode(architectureData);
     setSvg(null);
 
+    // Trigger auto-save when visual diagram changes (2 second debounce)
+    if (hasLoadedRef.current && id && id !== 'new') {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+      autoSaveTimerRef.current = setTimeout(async () => {
+        try {
+          await axiosInstance.put(`/api/flowchart/${id}`, {
+            mermaidString: architectureData
+          });
+          console.log('Auto-saved successfully');
+        } catch (error) {
+          console.error('Auto-save error:', error);
+        }
+      }, 2000);
+    }
+
     setTimeout(() => {
       isSyncingRef.current = false;
     }, 50);
-  }, [architectureData, setCode, setSvg]);
+  }, [architectureData, setCode, setSvg, id]);
 
   // Sync: Main Code Store → Architecture Store (when code editor changes)
   useEffect(() => {
@@ -892,46 +911,35 @@ const ArchitectureDiagramView = () => {
     isSyncingRef.current = true;
     lastSyncedCodeRef.current = code;
     setArchitectureData(code);
+    hasLoadedRef.current = true;
 
     setTimeout(() => {
       isSyncingRef.current = false;
     }, 50);
   }, [code, architectureData, setArchitectureData]);
 
-  // Fetch data from backend
-  const fetchData = useCallback(async () => {
-    if (!id || id === 'new') {
-      setLoading(false);
-      return;
-    }
-    try {
-      const response = await axiosInstance.get(`/api/flowchart/${id}`);
-      const freshCode = response.data.data.mermaidString;
-      console.log('=== LOADING FROM DATABASE ===');
-      console.log('Loaded code:', freshCode?.substring(0, 100));
-
-      if (freshCode && freshCode.includes('architecture-beta')) {
-        setArchitectureData(freshCode);
-      }
-      setCode(freshCode);
-      codeRef.current = freshCode;
-    } catch (error) {
-      console.error('Error fetching diagram:', error);
-      toast.error('Error loading diagram');
-    } finally {
-      setLoading(false);
-    }
-  }, [id, setCode, setArchitectureData]);
-
-  // Fetch data on mount
+  // Initialize from existing code in store (MermaidEditor handles the fetch)
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (code && code.includes('architecture-beta')) {
+      setArchitectureData(code);
+      hasLoadedRef.current = true;
+    }
+    setLoading(false);
+  }, []);
 
-  // Save to backend
-  const handleSaveToBackend = useCallback(async () => {
+  // Cleanup auto-save timer on unmount
+  useEffect(() => {
+    return () => {
+      if (autoSaveTimerRef.current) {
+        clearTimeout(autoSaveTimerRef.current);
+      }
+    };
+  }, []);
+
+  // Save to backend (silent for auto-save)
+  const saveToBackend = useCallback(async (showToast = true) => {
     if (!id || id === 'new') {
-      toast.error('Please save the diagram first');
+      if (showToast) toast.error('Please save the diagram first');
       return;
     }
     setIsSaving(true);
@@ -940,18 +948,23 @@ const ArchitectureDiagramView = () => {
         mermaidString: codeRef.current
       });
       if (response.status === 200) {
-        toast.success(response.data.message || 'Diagram saved successfully');
+        if (showToast) toast.success(response.data.message || 'Diagram saved successfully');
         console.log('Diagram saved successfully');
-      } else {
+      } else if (showToast) {
         toast.error('Something went wrong!');
       }
     } catch (error) {
       console.error('Error saving diagram:', error);
-      toast.error('Error saving diagram');
+      if (showToast) toast.error('Error saving diagram');
     } finally {
       setIsSaving(false);
     }
   }, [id]);
+
+  // Manual save handler
+  const handleSaveToBackend = useCallback(async () => {
+    await saveToBackend(true);
+  }, [saveToBackend]);
 
   // Custom nodes change handler to capture resize events
   const handleNodesChange = useCallback(
