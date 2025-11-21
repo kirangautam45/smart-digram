@@ -443,18 +443,12 @@ const GroupNode = React.memo(({ data, selected }) => {
   const individualStyle = data?.individualStyle || {};
   const globalStyle = data?.customStyle || {};
   const custom = { ...globalStyle, ...individualStyle };
-
-  const borderColor = custom.borderColor || custom.outlineColor || "#000000";
-  const borderStyle = custom.borderStyle || "dashed";
   const backgroundColor = custom.backgroundColor || "transparent";
-  const borderWidth = custom.borderWidth || 2;
-  const borderRadius = custom.borderRadius || 0;
   const textColor = custom.textColor || "#000000";
   const fontFamily = custom.fontFamily || "Arial, sans-serif";
   const fontSize = custom.fontSize || textSizes.nodeFontSize;
   const fontWeight = custom.fontWeight || "normal";
-  const animation = custom.animation || 'none';
-  const isHovered = hoveredGroupId === data?.groupData?.id;
+
 
   return (
     <div
@@ -1383,8 +1377,11 @@ const ArchitectureDiagramView = () => {
           change.type === 'dimensions'
       );
 
-      // Call the default handler first
-      onNodesChange(changes);
+      // Call the default handler, but filter out dimension changes since we handle them manually above
+      const nonDimensionChanges = changes.filter(change => change.type !== 'dimensions');
+      if (nonDimensionChanges.length > 0) {
+        onNodesChange(nonDimensionChanges);
+      }
 
       if (shouldTrack && !isApplyingHistory) {
         // Push to history after render cycle completes
@@ -2933,10 +2930,12 @@ const ArchitectureDiagramView = () => {
               if (originalParentId) {
                 const parent = currentNodes.find(p => p.id === originalParentId);
                 if (parent) {
-                  finalPosition = {
+                  const relativePos = {
                     x: nodeAbsX - parent.position.x,
                     y: nodeAbsY - parent.position.y,
                   };
+                  // Clamp position to keep service inside parent group bounds
+                  finalPosition = clampRelativePositionToGroup(relativePos, parent, serviceSize);
                 }
               }
 
@@ -2968,6 +2967,7 @@ const ArchitectureDiagramView = () => {
       nodes,
       getNodeDimensions,
       findContainingGroup,
+      clampRelativePositionToGroup,
       setNodes,
       saveNodePositionsToCode,
       setHoveredGroupId,
