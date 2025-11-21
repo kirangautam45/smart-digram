@@ -71,9 +71,7 @@ import { useArchitectureStore } from "@/store/architectureStore";
 import axiosInstance from "@/utils/axiosInstance";
 import toast from "react-hot-toast";
 
-const NodeActionsContext = React.createContext({
-  detachService: () => {},
-});
+const NodeActionsContext = React.createContext({});
 
 const GroupHoverContext = React.createContext({
   hoveredGroupId: null,
@@ -124,6 +122,7 @@ const CustomEdge = (props) => {
     <BezierEdge
       {...props}
       style={mergedStyle}
+      markerStart={props.markerStart}
       markerEnd={props.markerEnd}
     />
   );
@@ -630,7 +629,6 @@ const GroupNode = React.memo(({ data, selected }) => {
 });
 
 const ServiceNode = React.memo(({ data, selected }) => {
-  const { detachService } = useContext(NodeActionsContext);
   const [isHovering, setIsHovering] = useState(false);
   const serviceInfo = detectServiceType(data.serviceData.icon || data.serviceData.type);
 
@@ -699,13 +697,6 @@ const ServiceNode = React.memo(({ data, selected }) => {
     nodeFontSize: "12px",
   };
 
-  const handleDetachClick = (event) => {
-    event.stopPropagation();
-    if (detachService && data?.serviceData?.id) {
-      detachService(data.serviceData.id);
-    }
-  };
-
   const animation = custom.animation || 'none';
 
   return (
@@ -745,32 +736,6 @@ const ServiceNode = React.memo(({ data, selected }) => {
         minWidth={180}
         minHeight={100}
       />
-      {data?.serviceData?.group && (
-        <div
-          style={{
-            position: "absolute",
-            top: 4,
-            right: 4,
-            zIndex: 5,
-          }}
-        >
-          <Tooltip title="Detach from group">
-            <IconButton
-              size="small"
-              onClick={handleDetachClick}
-              sx={{
-                width: 22,
-                height: 22,
-                borderRadius: "50%",
-                backgroundColor: "rgba(255,255,255,0.9)",
-                "&:hover": { backgroundColor: "rgba(255,255,255,1)" },
-              }}
-            >
-              <CloseIcon sx={{ fontSize: 14 }} />
-            </IconButton>
-          </Tooltip>
-        </div>
-      )}
       <div
         style={{
           marginBottom: "8px",
@@ -1842,6 +1807,11 @@ const ArchitectureDiagramView = () => {
       else if (edgeLike?.markerEnd?.type === MarkerType.Arrow) arrow = "open";
       if (arrow && arrow !== "none") parts.push(`arrow:${arrow}`);
 
+      // Save bidirectional (markerStart)
+      if (edgeLike?.markerStart?.type === MarkerType.ArrowClosed || edgeLike?.markerStart?.type === MarkerType.Arrow) {
+        parts.push(`bidir:true`);
+      }
+
       const styleLine = parts.length
         ? `%% EdgeStyle: ${key} = ${parts.join("; ")}`
         : null;
@@ -2133,6 +2103,7 @@ const ArchitectureDiagramView = () => {
               if (kTrim === "stroke") style.stroke = v;
               else if (kTrim === "dash") style.dash = v;
               else if (kTrim === "arrow") style.arrow = v;
+              else if (kTrim === "bidir") style.bidir = v === "true";
               else if (kTrim === "type") style.type = v.toLowerCase();
             });
           result.edgeStyles.set(normKey, style);
@@ -2712,6 +2683,13 @@ const ArchitectureDiagramView = () => {
                   color: styleConf?.stroke || "#000000",
                 }
                 : undefined,
+            markerStart:
+              styleConf?.bidir
+                ? {
+                  type: MarkerType.ArrowClosed,
+                  color: styleConf?.stroke || "#000000",
+                }
+                : undefined,
             interactionWidth: 30,
             selectable: true,
             updatable: true,
@@ -2782,69 +2760,6 @@ const ArchitectureDiagramView = () => {
       }, 500);
     },
     [commitCodeUpdate, isSaving]
-  );
-
-  const detachServiceNode = useCallback(
-    (serviceId) => {
-      if (!serviceId) return;
-
-      // Prevent re-render from code update overwriting node changes
-      setPreventRerender(true);
-
-      // Update code first
-      updateServiceGroupInCode(serviceId, null);
-
-      setNodes((currentNodes) => {
-        const serviceNode = currentNodes.find((node) => node.id === serviceId);
-        if (!serviceNode || !serviceNode.parentNode) {
-          setPreventRerender(false);
-          return currentNodes;
-        }
-
-        const absolutePosition = getAbsoluteNodePosition(
-          serviceNode,
-          currentNodes
-        );
-
-        const updatedNodes = currentNodes.map((node) =>
-          node.id === serviceId
-            ? {
-                ...node,
-                parentNode: undefined,
-                extent: undefined,
-                position: absolutePosition,
-                data: {
-                  ...node.data,
-                  serviceData: {
-                    ...node.data.serviceData,
-                    group: null,
-                  },
-                },
-              }
-            : node
-        );
-
-        setTimeout(() => {
-          saveNodePositionsToCode(updatedNodes);
-          setTimeout(() => setPreventRerender(false), 100);
-        }, 0);
-
-        return updatedNodes;
-      });
-
-      setHoveredGroupId(null);
-      setStatusMessage(`Detached ${serviceId}`);
-      setTimeout(() => setStatusMessage(""), 2000);
-    },
-    [
-      getAbsoluteNodePosition,
-      saveNodePositionsToCode,
-      updateServiceGroupInCode,
-      setNodes,
-      setStatusMessage,
-      setHoveredGroupId,
-      setPreventRerender,
-    ]
   );
 
   const onNodeDragStart = useCallback(
@@ -4105,6 +4020,17 @@ const ArchitectureDiagramView = () => {
 
   const onConnect = useCallback(
     (params) => {
+      // Save to history BEFORE connection for undo/redo
+      if (!isApplyingHistory) {
+        setNodes((currentNodes) => {
+          setEdges((currentEdges) => {
+            pushToHistory({ nodes: currentNodes, edges: currentEdges, code: codeRef.current });
+            return currentEdges;
+          });
+          return currentNodes;
+        });
+      }
+
       setPreventRerender(true);
 
       const sourceHandle = params.sourceHandle || "right";
@@ -4136,19 +4062,6 @@ const ArchitectureDiagramView = () => {
       setEdges((currentEdges) => [...currentEdges, newEdge]);
       setStatusMessage(`Connected ${params.source} to ${params.target}`);
       setTimeout(() => setStatusMessage(""), 3000);
-
-      // Track connection creation in history
-      if (!isApplyingHistory) {
-        setTimeout(() => {
-          setNodes((currentNodes) => {
-            setEdges((currentEdges) => {
-              pushToHistory({ nodes: currentNodes, edges: currentEdges, code: codeRef.current });
-              return currentEdges;
-            });
-            return currentNodes;
-          });
-        }, 150);
-      }
 
       setTimeout(() => setPreventRerender(false), 100);
     },
@@ -4837,7 +4750,7 @@ const ArchitectureDiagramView = () => {
         />
       )}
 
-      <NodeActionsContext.Provider value={{ detachService: detachServiceNode }}>
+      <NodeActionsContext.Provider value={{}}>
         <GroupHoverContext.Provider value={{ hoveredGroupId }}>
           <div
             className={

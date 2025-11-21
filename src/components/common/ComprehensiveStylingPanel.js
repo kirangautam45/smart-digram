@@ -185,8 +185,7 @@ export default function ComprehensiveStylingPanel({
           background: 'linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%)',
           color: 'white',
         }}
-      >
-       
+      />
 
       {/* Tabs */}
       <Tabs
