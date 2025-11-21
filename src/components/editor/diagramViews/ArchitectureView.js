@@ -51,6 +51,7 @@ import ReactFlow, {
   useReactFlow,
   NodeResizer,
   ReactFlowProvider,
+  useUpdateNodeInternals,
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { useStore } from "@/store";
@@ -1183,6 +1184,7 @@ const ArchitectureDiagramView = () => {
   const [pendingMove, setPendingMove] = useState(null);
 
   const reactFlow = useReactFlow();
+  const updateNodeInternals = useUpdateNodeInternals();
   const codeRef = useRef(code);
   codeRef.current = code;
   const nodesRef = useRef([]);
@@ -2788,13 +2790,18 @@ const ArchitectureDiagramView = () => {
             return n;
           })
         );
+
+        // Force ReactFlow to re-read node properties after state update
+        setTimeout(() => {
+          updateNodeInternals(node.id);
+        }, 0);
       } else if (node.type === "group") {
         // For group nodes, don't modify state during drag start
         // Just log for debugging - ReactFlow handles group dragging natively
         console.log('📦 Group drag start - letting ReactFlow handle it');
       }
     },
-    [setNodes, getAbsoluteNodePosition]
+    [setNodes, getAbsoluteNodePosition, updateNodeInternals]
   );
 
   const onNodeDrag = useCallback(

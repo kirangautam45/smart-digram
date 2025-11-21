@@ -7,28 +7,6 @@ import { Dialog, DialogTitle, DialogContent, DialogActions, Button } from '@mui/
 import DeleteIcon from '@mui/icons-material/Delete';
 import IconPickerGrid from '@/components/common/IconPickerGrid';
 
-/**
- * @typedef {Object} IndividualNodeStyle
- * @property {string} [backgroundColor]
- * @property {string} [borderColor]
- * @property {number} [borderWidth]
- * @property {'solid' | 'dashed' | 'dotted'} [borderStyle]
- * @property {number} [borderRadius]
- * @property {string} [textColor]
- * @property {string} [fontSize]
- * @property {string} [fontFamily]
- * @property {string} [fontWeight]
- * @property {string} [animation]
- */
-
-/**
- * @typedef {Object} IndividualEdgeStyle
- * @property {string} [stroke]
- * @property {number} [strokeWidth]
- * @property {string} [strokeDasharray]
- * @property {boolean} [animated]
- * @property {string} [animation]
- */
 
 // Color options will be loaded from palette store dynamically
 
