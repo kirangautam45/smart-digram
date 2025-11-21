@@ -77,9 +77,6 @@ const GroupHoverContext = React.createContext({
   hoveredGroupId: null,
 });
 
-const SERVICE_NODE_SIZE = { width: 180, height: 120 };
-const GROUP_NODE_SIZE = { width: 600, height: 400 };
-
 const CloudIcon = ({ serviceType, size = 120, className = "" }) => {
   try {
     const { icon: IconComponent } = detectServiceType(serviceType);
@@ -122,7 +119,6 @@ const CustomEdge = (props) => {
     <BezierEdge
       {...props}
       style={mergedStyle}
-      markerStart={props.markerStart}
       markerEnd={props.markerEnd}
     />
   );
@@ -465,13 +461,10 @@ const GroupNode = React.memo(({ data, selected }) => {
       ref={groupRef}
       onMouseEnter={() => setIsHovering(true)}
       onMouseLeave={() => setIsHovering(false)}
-      className={animation !== 'none' ? animation : ''}
+     
       style={{
-        padding: "16px",
-        border: selected || isHovered
-          ? `${borderWidth + 1}px ${borderStyle} ${borderColor}`
-          : `${borderWidth}px ${borderStyle} ${borderColor}`,
-        borderRadius: `${borderRadius}px`,
+     
+       
         width: "100%",
         height: "100%",
         textAlign: "center",
@@ -479,13 +472,8 @@ const GroupNode = React.memo(({ data, selected }) => {
         fontSize: fontSize,
         fontWeight: fontWeight,
         color: textColor,
-        position: "relative",
-        boxSizing: "border-box",
         background: backgroundColor,
-        transition: "border-color 0.15s ease, box-shadow 0.15s ease",
-        boxShadow: isHovered
-          ? "0 0 12px rgba(0,0,0,0.25)"
-          : "0 1px 3px rgba(0,0,0,0.3)",
+      
       }}
     >
       <NodeResizer
@@ -541,10 +529,12 @@ const GroupNode = React.memo(({ data, selected }) => {
         position={Position.Top}
         id="top"
         style={{
-          background: "#000000",
+          background: "#667eea",
           width: textSizes.handleSize,
           height: textSizes.handleSize,
           pointerEvents: "auto",
+          opacity: selected || isHovering ? 1 : 0,
+          transition: "opacity 0.2s",
         }}
       />
       <Handle
@@ -552,10 +542,12 @@ const GroupNode = React.memo(({ data, selected }) => {
         position={Position.Top}
         id="top"
         style={{
-          background: "#000000",
+          background: "#667eea",
           width: textSizes.handleSize,
           height: textSizes.handleSize,
           pointerEvents: "auto",
+          opacity: selected || isHovering ? 1 : 0,
+          transition: "opacity 0.2s",
         }}
       />
       <Handle
@@ -563,10 +555,12 @@ const GroupNode = React.memo(({ data, selected }) => {
         position={Position.Bottom}
         id="bottom"
         style={{
-          background: "#000000",
+          background: "#667eea",
           width: textSizes.handleSize,
           height: textSizes.handleSize,
           pointerEvents: "auto",
+          opacity: selected || isHovering ? 1 : 0,
+          transition: "opacity 0.2s",
         }}
       />
       <Handle
@@ -574,10 +568,12 @@ const GroupNode = React.memo(({ data, selected }) => {
         position={Position.Bottom}
         id="bottom"
         style={{
-          background: "#000000",
+          background: "#667eea",
           width: textSizes.handleSize,
           height: textSizes.handleSize,
           pointerEvents: "auto",
+          opacity: selected || isHovering ? 1 : 0,
+          transition: "opacity 0.2s",
         }}
       />
       <Handle
@@ -585,10 +581,12 @@ const GroupNode = React.memo(({ data, selected }) => {
         position={Position.Left}
         id="left"
         style={{
-          background: "#000000",
+          background: "#667eea",
           width: textSizes.handleSize,
           height: textSizes.handleSize,
           pointerEvents: "auto",
+          opacity: selected || isHovering ? 1 : 0,
+          transition: "opacity 0.2s",
         }}
       />
       <Handle
@@ -596,10 +594,12 @@ const GroupNode = React.memo(({ data, selected }) => {
         position={Position.Left}
         id="left"
         style={{
-          background: "#000000",
+          background: "#667eea",
           width: textSizes.handleSize,
           height: textSizes.handleSize,
           pointerEvents: "auto",
+          opacity: selected || isHovering ? 1 : 0,
+          transition: "opacity 0.2s",
         }}
       />
       <Handle
@@ -607,10 +607,12 @@ const GroupNode = React.memo(({ data, selected }) => {
         position={Position.Right}
         id="right"
         style={{
-          background: "#000000",
+          background: "#667eea",
           width: textSizes.handleSize,
           height: textSizes.handleSize,
           pointerEvents: "auto",
+          opacity: selected || isHovering ? 1 : 0,
+          transition: "opacity 0.2s",
         }}
       />
       <Handle
@@ -618,10 +620,12 @@ const GroupNode = React.memo(({ data, selected }) => {
         position={Position.Right}
         id="right"
         style={{
-          background: "#000000",
+          background: "#667eea",
           width: textSizes.handleSize,
           height: textSizes.handleSize,
           pointerEvents: "auto",
+          opacity: selected || isHovering ? 1 : 0,
+          transition: "opacity 0.2s",
         }}
       />
     </div>
@@ -1312,7 +1316,7 @@ const ArchitectureDiagramView = () => {
             // If the resized node is a group, auto-resize its child services
             const resizedNode = updatedNodes.find(n => n.id === change.id);
             if (resizedNode && resizedNode.data?.nodeType === 'group') {
-              const groupId = resizedNode.data.groupData.id;
+              const groupNodeId = resizedNode.id;
               const oldDimensions = nds.find(n => n.id === change.id);
               const oldWidth = oldDimensions?.width || oldDimensions?.style?.width || 600;
               const oldHeight = oldDimensions?.height || oldDimensions?.style?.height || 400;
@@ -1320,26 +1324,23 @@ const ArchitectureDiagramView = () => {
               const scaleX = change.dimensions.width / oldWidth;
               const scaleY = change.dimensions.height / oldHeight;
 
-              // Find and resize all child services
+              // Find and resize all child services (check both parentNode and serviceData.group)
               return updatedNodes.map((node) => {
-                if (node.data?.nodeType === 'service' && node.data.serviceData.group === groupId) {
+                const isChildService = node.data?.nodeType === 'service' &&
+                  (node.parentNode === groupNodeId || node.data.serviceData?.group === resizedNode.data.groupData?.id);
+
+                if (isChildService) {
                   // Calculate new dimensions for child service
                   const currentWidth = node.width || node.style?.width || 180;
                   const currentHeight = node.height || node.style?.height || 120;
-                  const newWidth = currentWidth * scaleX;
-                  const newHeight = currentHeight * scaleY;
+                  const newWidth = Math.max(100, currentWidth * scaleX);
+                  const newHeight = Math.max(60, currentHeight * scaleY);
 
-                  // Also scale the position relative to group
+                  // Scale the position (relative position within parent)
                   const currentX = node.position?.x || 0;
                   const currentY = node.position?.y || 0;
-                  const groupX = resizedNode.position?.x || 0;
-                  const groupY = resizedNode.position?.y || 0;
-
-                  // Calculate relative position and scale it
-                  const relativeX = currentX - groupX;
-                  const relativeY = currentY - groupY;
-                  const newX = groupX + (relativeX * scaleX);
-                  const newY = groupY + (relativeY * scaleY);
+                  const newX = currentX * scaleX;
+                  const newY = currentY * scaleY;
 
                   return {
                     ...node,
@@ -1544,7 +1545,7 @@ const ArchitectureDiagramView = () => {
   }, []); // Empty deps - only run once on mount
 
   const getNodeDimensions = useCallback(
-    (nodeId, fallback = SERVICE_NODE_SIZE) => {
+    (nodeId, fallback = { width: 180, height: 120 }) => {
       const rfNode = reactFlow?.getNode?.(nodeId);
       const measuredWidth =
         rfNode?.measured?.width ?? rfNode?.width ?? fallback.width;
@@ -1573,11 +1574,11 @@ const ArchitectureDiagramView = () => {
   }, []);
 
   const clampRelativePositionToGroup = useCallback(
-    (relativePosition, groupNode, nodeSize = SERVICE_NODE_SIZE) => {
+    (relativePosition, groupNode, nodeSize = { width: 180, height: 120 }) => {
       if (!groupNode) return relativePosition;
       const fallback = {
-        width: groupNode.style?.width || GROUP_NODE_SIZE.width,
-        height: groupNode.style?.height || GROUP_NODE_SIZE.height,
+        width: groupNode.style?.width || 600,
+        height: groupNode.style?.height || 400,
       };
       const groupSize = getNodeDimensions(groupNode.id, fallback);
       const padding = 20;
@@ -1660,8 +1661,8 @@ const ArchitectureDiagramView = () => {
         .filter((node) => node.type === "group" && node.id !== excludeGroupId)
         .find((groupNode) => {
           const fallback = {
-            width: groupNode.style?.width || GROUP_NODE_SIZE.width,
-            height: groupNode.style?.height || GROUP_NODE_SIZE.height,
+            width: groupNode.style?.width || 600,
+            height: groupNode.style?.height || 400,
           };
           const size = getNodeDimensions(groupNode.id, fallback);
           const groupPosition = getAbsoluteNodePosition(groupNode, snapshot);
@@ -1806,11 +1807,6 @@ const ArchitectureDiagramView = () => {
       if (edgeLike?.markerEnd?.type === MarkerType.ArrowClosed) arrow = "closed";
       else if (edgeLike?.markerEnd?.type === MarkerType.Arrow) arrow = "open";
       if (arrow && arrow !== "none") parts.push(`arrow:${arrow}`);
-
-      // Save bidirectional (markerStart)
-      if (edgeLike?.markerStart?.type === MarkerType.ArrowClosed || edgeLike?.markerStart?.type === MarkerType.Arrow) {
-        parts.push(`bidir:true`);
-      }
 
       const styleLine = parts.length
         ? `%% EdgeStyle: ${key} = ${parts.join("; ")}`
@@ -2103,7 +2099,6 @@ const ArchitectureDiagramView = () => {
               if (kTrim === "stroke") style.stroke = v;
               else if (kTrim === "dash") style.dash = v;
               else if (kTrim === "arrow") style.arrow = v;
-              else if (kTrim === "bidir") style.bidir = v === "true";
               else if (kTrim === "type") style.type = v.toLowerCase();
             });
           result.edgeStyles.set(normKey, style);
@@ -2683,13 +2678,6 @@ const ArchitectureDiagramView = () => {
                   color: styleConf?.stroke || "#000000",
                 }
                 : undefined,
-            markerStart:
-              styleConf?.bidir
-                ? {
-                  type: MarkerType.ArrowClosed,
-                  color: styleConf?.stroke || "#000000",
-                }
-                : undefined,
             interactionWidth: 30,
             selectable: true,
             updatable: true,
@@ -2827,7 +2815,7 @@ const ArchitectureDiagramView = () => {
 
       // Track which group the service is hovering over (only for service nodes)
       if (node.type === "service") {
-        const serviceSize = getNodeDimensions(node.id, SERVICE_NODE_SIZE);
+        const serviceSize = getNodeDimensions(node.id, { width: 180, height: 120 });
         // Use positionAbsolute for accurate positioning
         const absolutePosition = node.positionAbsolute || node.position;
         const absoluteCenter = {
@@ -2904,7 +2892,7 @@ const ArchitectureDiagramView = () => {
       console.log('📍 Absolute Position:', { x: nodeAbsX, y: nodeAbsY });
 
       // Find which group the node is now inside
-      const serviceSize = getNodeDimensions(node.id, SERVICE_NODE_SIZE);
+      const serviceSize = getNodeDimensions(node.id, { width: 180, height: 120 });
       const absoluteCenter = {
         x: nodeAbsX + serviceSize.width / 2,
         y: nodeAbsY + serviceSize.height / 2,
@@ -4020,17 +4008,6 @@ const ArchitectureDiagramView = () => {
 
   const onConnect = useCallback(
     (params) => {
-      // Save to history BEFORE connection for undo/redo
-      if (!isApplyingHistory) {
-        setNodes((currentNodes) => {
-          setEdges((currentEdges) => {
-            pushToHistory({ nodes: currentNodes, edges: currentEdges, code: codeRef.current });
-            return currentEdges;
-          });
-          return currentNodes;
-        });
-      }
-
       setPreventRerender(true);
 
       const sourceHandle = params.sourceHandle || "right";
@@ -4062,6 +4039,19 @@ const ArchitectureDiagramView = () => {
       setEdges((currentEdges) => [...currentEdges, newEdge]);
       setStatusMessage(`Connected ${params.source} to ${params.target}`);
       setTimeout(() => setStatusMessage(""), 3000);
+
+      // Track connection creation in history
+      if (!isApplyingHistory) {
+        setTimeout(() => {
+          setNodes((currentNodes) => {
+            setEdges((currentEdges) => {
+              pushToHistory({ nodes: currentNodes, edges: currentEdges, code: codeRef.current });
+              return currentEdges;
+            });
+            return currentNodes;
+          });
+        }, 150);
+      }
 
       setTimeout(() => setPreventRerender(false), 100);
     },
@@ -4236,7 +4226,7 @@ const ArchitectureDiagramView = () => {
       const draggedNode = updatedNodes.find((n) => n.id === node.id);
 
       if (draggedNode && draggedNode.type === "service") {
-        const serviceSize = getNodeDimensions(node.id, SERVICE_NODE_SIZE);
+        const serviceSize = getNodeDimensions(node.id, { width: 180, height: 120 });
 
         if (newParentId) {
           // Moving into a group
@@ -4741,6 +4731,7 @@ const ArchitectureDiagramView = () => {
           onEdgeStyleChange={handleEdgeStyleChange}
           onNodeDataChange={handleNodeDataChange}
           onNodeDelete={handleNodeDelete}
+          onEdgeDelete={handleDeleteEdge}
           onServiceCreate={handleServiceCreate}
           onClose={() => {
             setEditorOpen(false);

@@ -63,6 +63,7 @@ const edgeAnimations = [
  * @param {Function} props.onEdgeStyleChange - Callback for edge style changes
  * @param {Function} props.onNodeDataChange - Callback for node data changes (like label)
  * @param {Function} props.onNodeDelete - Callback to delete the node
+ * @param {Function} props.onEdgeDelete - Callback to delete the edge
  * @param {Function} props.onServiceCreate - Callback to create new service
  * @param {Function} props.onClose - Callback to close the panel
  */
@@ -76,6 +77,7 @@ export default function NodeEditorPanel({
   onEdgeStyleChange,
   onNodeDataChange,
   onNodeDelete,
+  onEdgeDelete,
   onServiceCreate,
   onClose,
 }) {
@@ -134,6 +136,7 @@ export default function NodeEditorPanel({
   );
 
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteEdgeDialogOpen, setDeleteEdgeDialogOpen] = useState(false);
 
   // Service creation form state
   const [newServiceData, setNewServiceData] = useState({
@@ -276,6 +279,35 @@ export default function NodeEditorPanel({
             {selectedNode && onNodeDelete && (
               <button
                 onClick={() => setDeleteDialogOpen(true)}
+                style={{
+                  background: '#ffffff',
+                  border: 'none',
+                  color: '#ef4444',
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '12px',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  transition: 'all 0.2s',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background = '#ef4444';
+                  e.currentTarget.style.color = '#ffffff';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = '#ffffff';
+                  e.currentTarget.style.color = '#ef4444';
+                }}
+              >
+                <DeleteIcon style={{ fontSize: '24px' }} />
+              </button>
+            )}
+            {selectedEdge && onEdgeDelete && (
+              <button
+                onClick={() => setDeleteEdgeDialogOpen(true)}
                 style={{
                   background: '#ffffff',
                   border: 'none',
@@ -1243,6 +1275,62 @@ export default function NodeEditorPanel({
               onClick={() => {
                 onNodeDelete(selectedNode.id);
                 setDeleteDialogOpen(false);
+                onClose();
+              }}
+              style={{
+                backgroundColor: '#6ee7b7',
+                color: '#1f2937',
+                textTransform: 'none',
+                borderRadius: '8px',
+                padding: '8px 32px',
+                fontSize: '15px',
+                fontWeight: '500',
+              }}
+            >
+              OK
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
+
+      {/* Delete Edge Confirmation Dialog */}
+      {selectedEdge && (
+        <Dialog
+          open={deleteEdgeDialogOpen}
+          onClose={() => setDeleteEdgeDialogOpen(false)}
+          PaperProps={{
+            style: {
+              backgroundColor: '#1f2937',
+              color: '#ffffff',
+              borderRadius: '12px',
+              minWidth: '400px',
+            },
+          }}
+        >
+          <DialogContent>
+            <p style={{ margin: 0, fontSize: '16px' }}>
+              Are you sure you want to delete this connection?
+            </p>
+          </DialogContent>
+          <DialogActions style={{ padding: '16px 24px' }}>
+            <Button
+              onClick={() => setDeleteEdgeDialogOpen(false)}
+              style={{
+                backgroundColor: '#374151',
+                color: '#ffffff',
+                textTransform: 'none',
+                borderRadius: '8px',
+                padding: '8px 32px',
+                fontSize: '15px',
+                fontWeight: '500',
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={() => {
+                onEdgeDelete(selectedEdge.id);
+                setDeleteEdgeDialogOpen(false);
                 onClose();
               }}
               style={{

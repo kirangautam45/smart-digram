@@ -25,7 +25,7 @@ import {
 } from "@mui/material";
 import { useFormik } from "formik";
 import * as Yup from "yup";
-import { Close as CloseIcon } from "@mui/icons-material";
+import { CloseIcon } from '@mui/icons-material'
 import Image from "next/image";
 import Upload from "../../asset/dashboard/upload.png";
 import { useRouter } from "next/navigation";
