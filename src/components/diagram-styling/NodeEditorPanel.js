@@ -1081,52 +1081,39 @@ export default function NodeEditorPanel({
               >
                 Arrow Direction
               </label>
-              <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-                <label
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    cursor: 'pointer',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    border: `2px solid ${colors.neutral[300]}`,
-                    background: colors.background.white,
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={edgeStyle.markerStart}
-                    onChange={(e) => updateEdgeStyle({ markerStart: e.target.checked })}
-                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                  />
-                  <span style={{ fontSize: '13px', fontWeight: '500', color: colors.neutral[700] }}>
-                    ← Start Arrow
-                  </span>
-                </label>
-                <label
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    cursor: 'pointer',
-                    padding: '8px 12px',
-                    borderRadius: '6px',
-                    border: `2px solid ${colors.neutral[300]}`,
-                    background: colors.background.white,
-                  }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={edgeStyle.markerEnd}
-                    onChange={(e) => updateEdgeStyle({ markerEnd: e.target.checked })}
-                    style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                  />
-                  <span style={{ fontSize: '13px', fontWeight: '500', color: colors.neutral[700] }}>
-                    End Arrow →
-                  </span>
-                </label>
-              </div>
+              <select
+                value={
+                  edgeStyle.markerStart && edgeStyle.markerEnd
+                    ? 'both'
+                    : edgeStyle.markerStart
+                      ? 'start'
+                      : edgeStyle.markerEnd
+                        ? 'end'
+                        : 'none'
+                }
+                onChange={(e) => {
+                  const val = e.target.value;
+                  updateEdgeStyle({
+                    markerStart: val === 'start' || val === 'both',
+                    markerEnd: val === 'end' || val === 'both',
+                  });
+                }}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  borderRadius: '8px',
+                  border: `2px solid ${colors.neutral[300]}`,
+                  fontSize: '14px',
+                  cursor: 'pointer',
+                  fontWeight: '500',
+                  boxSizing: 'border-box',
+                }}
+              >
+                <option value="end">End Arrow →</option>
+                <option value="start">← Start Arrow</option>
+                <option value="both">↔ Both Arrows</option>
+                <option value="none">— No Arrows</option>
+              </select>
             </div>
 
             {/* Animated Toggle */}

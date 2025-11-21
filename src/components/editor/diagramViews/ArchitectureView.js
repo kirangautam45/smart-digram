@@ -4544,6 +4544,9 @@ const ArchitectureDiagramView = () => {
                         markerEnd: ed.markerEnd
                           ? { ...ed.markerEnd, color: stroke }
                           : undefined,
+                        markerStart: ed.markerStart
+                          ? { ...ed.markerStart, color: stroke }
+                          : undefined,
                       }
                       : ed
                   )
@@ -4553,6 +4556,9 @@ const ArchitectureDiagramView = () => {
                   style: { ...(selectedEdge.style || {}), stroke },
                   markerEnd: selectedEdge.markerEnd
                     ? { ...selectedEdge.markerEnd, color: stroke }
+                    : undefined,
+                  markerStart: selectedEdge.markerStart
+                    ? { ...selectedEdge.markerStart, color: stroke }
                     : undefined,
                 };
                 setSelectedEdge(updated);
@@ -4610,39 +4616,47 @@ const ArchitectureDiagramView = () => {
             </Select>
           </FormControl>
           <FormControl size="small">
-            <InputLabel id="arrow-type-label">Arrow</InputLabel>
+            <InputLabel id="arrow-direction-label">Arrow</InputLabel>
             <Select
-              labelId="arrow-type-label"
+              labelId="arrow-direction-label"
               label="Arrow"
               value={
-                selectedEdge?.markerEnd?.type === MarkerType.ArrowClosed
-                  ? "closed"
-                  : selectedEdge?.markerEnd?.type === MarkerType.Arrow
-                    ? "open"
-                    : "none"
+                selectedEdge?.markerStart && selectedEdge?.markerEnd
+                  ? "both"
+                  : selectedEdge?.markerStart
+                    ? "start"
+                    : selectedEdge?.markerEnd
+                      ? "end"
+                      : "none"
               }
               onChange={(e) => {
                 const val = e.target.value;
-                const markerEnd =
-                  val === "none"
-                    ? undefined
-                    : {
-                      type:
-                        val === "closed" ? MarkerType.ArrowClosed : MarkerType.Arrow,
-                      color: selectedEdge?.style?.stroke || "#000000",
-                    };
+                const color = selectedEdge?.style?.stroke || "#000000";
+                const arrowMarker = { type: MarkerType.ArrowClosed, color };
+
+                let markerStart = undefined;
+                let markerEnd = undefined;
+
+                if (val === "end" || val === "both") {
+                  markerEnd = arrowMarker;
+                }
+                if (val === "start" || val === "both") {
+                  markerStart = arrowMarker;
+                }
+
                 setEdges((eds) =>
-                  eds.map((ed) => (ed.id === selectedEdge.id ? { ...ed, markerEnd } : ed))
+                  eds.map((ed) => (ed.id === selectedEdge.id ? { ...ed, markerStart, markerEnd } : ed))
                 );
-                const updated = { ...selectedEdge, markerEnd };
+                const updated = { ...selectedEdge, markerStart, markerEnd };
                 setSelectedEdge(updated);
                 upsertEdgeStyleInCode(updated);
               }}
               sx={{ minWidth: 100 }}
             >
-              <MenuItem value="none">None</MenuItem>
-              <MenuItem value="open">Open</MenuItem>
-              <MenuItem value="closed">Closed</MenuItem>
+              <MenuItem value="end">End Arrow →</MenuItem>
+              <MenuItem value="start">← Start Arrow</MenuItem>
+              <MenuItem value="both">↔ Both Arrows</MenuItem>
+              <MenuItem value="none">— No Arrows</MenuItem>
             </Select>
           </FormControl>
           <Tooltip title="Delete Connection">
